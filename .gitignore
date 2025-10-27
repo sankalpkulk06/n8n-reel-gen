@@ -1,0 +1,75 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Project Specific - Generated Files
+reel/*.mp4
+reel/*.wav
+reel/*.srt
+piper/out/*.wav
+piper/piper_stdout.txt
+piper/piper_stderr.txt
+
+# Large Model Files (download separately)
+piper/models/*.onnx
+piper/models/*.onnx.json
+
+# Local Configuration and Testing
+cmd.txt
+.env
+.env.local
+*.local
+
+# n8n
+.n8n/
+
+# Logs
+*.log
+logs/
+
+# OS
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+

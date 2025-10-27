@@ -1,0 +1,181 @@
+{
+  "name": "Self-Help Reel Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reel-generate",
+        "options": {}
+      },
+      "id": "b6015142-c260-4963-9ad2-249fa5a8ec3c",
+      "name": "Webhook1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        48
+      ],
+      "webhookId": "34567d7f-ec97-4645-a6ee-ade180009602"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import base64\nimport re\nfrom datetime import timedelta\n\n# Get input from n8n\ninput_data = items[0]['json']\n\n# Extract payload from webhook\npayload = input_data.get('body', input_data)\nif isinstance(payload, str):\n    import json\n    payload = json.loads(payload)\n\n# Configuration\nWORK_DIR = 'C:\\\\Users\\\\EndUser\\\\Desktop\\\\n8n-video\\\\reel'\nPIPER_EXE = 'C:\\\\Users\\\\EndUser\\\\Desktop\\\\n8n-video\\\\piper\\\\piper.exe'\nPIPER_MODEL = 'C:\\\\Users\\\\EndUser\\\\Desktop\\\\n8n-video\\\\piper\\\\models\\\\en_US-lessac-medium.onnx'\n\n# Validate input\nif not payload.get('text') or not isinstance(payload['text'], str) or not payload['text'].strip():\n    raise ValueError('Missing \"text\" in POST body')\n\ndef slugify(text):\n    \"\"\"Convert text to URL-friendly slug\"\"\"\n    text = text.lower()\n    text = re.sub(r'[^a-z0-9]+', '-', text)\n    text = re.sub(r'(^-|-$)', '', text)\n    return text[:60]\n\n# Extract and process text\nfull_text = payload['text'].strip()\ntitle = payload.get('title', '').strip() if payload.get('title') else full_text.split('\\n')[0].split('.')[0].split('!')[0].split('?')[0][:40]\nout_name = payload.get('outName', '').strip() if payload.get('outName') else f\"{slugify(title) or 'reel'}.mp4\"\n\n# Chunk text into ~10 word segments\nwords = re.sub(r'\\s+', ' ', full_text).split(' ')\nwords = [w for w in words if w]  # Filter empty strings\nchunks = []\ni = 0\nwhile i < len(words):\n    chunk_size = 10\n    chunk = ' '.join(words[i:i+chunk_size])\n    chunks.append(chunk)\n    i += chunk_size\n\n# Create SRT timing (3 seconds per chunk)\nper_chunk_duration = 3.0\nlines = []\ncurrent_time = 0\n\nfor idx, text in enumerate(chunks):\n    start = current_time\n    end = current_time + per_chunk_duration\n    lines.append({\n        'index': idx + 1,\n        'text': text,\n        'start': start,\n        'end': end\n    })\n    current_time = end\n\ntotal_duration = current_time + 1.2  # Add tail headroom\n\ndef to_srt_time(seconds):\n    \"\"\"Convert seconds to SRT timestamp format (HH:MM:SS,mmm)\"\"\"\n    ms = int(seconds * 1000)\n    hours = ms // 3600000\n    minutes = (ms % 3600000) // 60000\n    secs = (ms % 60000) // 1000\n    millis = ms % 1000\n    return f\"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}\"\n\n# Build SRT content\nsrt = ''\nfor line in lines:\n    srt += f\"{line['index']}\\n\"\n    srt += f\"{to_srt_time(line['start'])} --> {to_srt_time(line['end'])}\\n\"\n    srt += f\"{line['text']}\\n\\n\"\n\n# Generate file paths\nfile_base = slugify(title) or f\"reel-{int(time.time())}\"\nsrt_path = f\"{WORK_DIR}\\\\{file_base}.srt\"\nwav_path = f\"{WORK_DIR}\\\\{file_base}.wav\"\nout_path = f\"{WORK_DIR}\\\\{out_name}\"\n\n# Escape colons for ffmpeg subtitles filter (Windows path issue)\nsrt_esc = srt_path.replace(':', '\\\\\\\\:')\n\n# Encode SRT to base64 for safe PowerShell passing\nsrt_base64 = base64.b64encode(srt.encode('utf-8')).decode('utf-8')\n\n# Return output\nreturn [{\n    'json': {\n        'meta': {\n            'title': title,\n            'outName': out_name,\n            'totalDur': total_duration\n        },\n        'paths': {\n            'WORK_DIR': WORK_DIR,\n            'PIPER_EXE': PIPER_EXE,\n            'PIPER_MODEL': PIPER_MODEL,\n            'srtPath': srt_path,\n            'wavPath': wav_path,\n            'outPath': out_path,\n            'srtEsc': srt_esc\n        },\n        'fullText': full_text,\n        'srt': srt,\n        'srtBase64': srt_base64\n    }\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        48
+      ],
+      "id": "8cbee616-e127-4eda-a146-17e4604fcec8",
+      "name": "Prepare1"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import os\nimport base64\n\n# Get input from Store Data node\ndata = items[0]['json']\n\n# Extract the necessary data\nwork_dir = data['paths']['WORK_DIR']\nsrt_path = data['paths']['srtPath']\nsrt_base64 = data['srtBase64']\n\ntry:\n    # Create output directory if it doesn't exist\n    os.makedirs(work_dir, exist_ok=True)\n    \n    # Decode base64 SRT content\n    srt_content = base64.b64decode(srt_base64).decode('utf-8')\n    \n    # Write SRT file to disk\n    with open(srt_path, 'w', encoding='utf-8') as f:\n        f.write(srt_content)\n    \n    # Return success\n    return [{\n        'json': {\n            'success': True,\n            'message': f'Created folder and wrote SRT file to {srt_path}',\n            'srtPath': srt_path,\n            'exitCode': 0\n        }\n    }]\n    \nexcept Exception as e:\n    # Return error\n    return [{\n        'json': {\n            'success': False,\n            'error': str(e),\n            'exitCode': 1\n        }\n    }]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        176
+      ],
+      "id": "95917be8-a4ee-48fa-9048-a6fb2834dff8",
+      "name": "Create Folder & Write SRT "
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "# Get input\ndata = items[0]['json']\n\n# Wrap with _originalData backup\nreturn [{\n    'json': {\n        'meta': data['meta'],\n        'paths': data['paths'],\n        'fullText': data['fullText'],\n        'srt': data['srt'],\n        'srtBase64': data['srtBase64'],\n        '_originalData': data  # Store complete backup\n    }\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        -64
+      ],
+      "id": "600e071f-b7d8-496a-84db-509fb5b6a3bf",
+      "name": "Store Data1"
+    },
+    {
+      "parameters": {
+        "command": "=powershell -NoProfile -Command \"echo '{\\\"text\\\":\\\"{{ $json.fullText }}\\\"}' | & '{{ $json.paths.PIPER_EXE }}' -m '{{ $json.paths.PIPER_MODEL }}' -f '{{ $json.paths.wavPath }}' --json-input\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        576,
+        -64
+      ],
+      "id": "4112b252-26d9-442b-b4cf-5396fd4ed7ae",
+      "name": "Execute Command"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "# Store data before Piper Execute Command\ndata = items[0]['json']\n\n# Store in global context (if available) or return with marker\nreturn [{\n    'json': {\n        **data,\n        '_beforePiper': data  # Backup before Piper\n    }\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        -64
+      ],
+      "id": "97e60cd7-3fec-4eb1-842b-ce78a511b51b",
+      "name": "Store Before Piper"
+    },
+    {
+      "parameters": {
+        "command": "\"C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe\" -y -f lavfi -i \"color=c=black:s=1080x1920:d=4.2\" -i \"C:\\Users\\EndUser\\Desktop\\n8n-video\\reel\\self-help-motivation.wav\" -vf \"subtitles='C\\:/Users/EndUser/Desktop/n8n-video/reel/self-help-motivation.srt':force_style='FontName=Arial,FontSize=48,Bold=1,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=1,Outline=3,Shadow=2,Alignment=2,MarginV=100'\" -c:v libx264 -profile:v high -pix_fmt yuv420p -r 30 -c:a aac -b:a 160k -shortest \"C:\\Users\\EndUser\\Desktop\\n8n-video\\reel\\mind-reel.mp4\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        784,
+        -64
+      ],
+      "id": "38184170-ba00-4936-a504-69f73a08da47",
+      "name": "FFmpeg Render1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Prepare1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare1": {
+      "main": [
+        [
+          {
+            "node": "Create Folder & Write SRT ",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Store Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Folder & Write SRT ": {
+      "main": [
+        []
+      ]
+    },
+    "Store Data1": {
+      "main": [
+        [
+          {
+            "node": "Store Before Piper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Before Piper": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "FFmpeg Render1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "306082f2-7df9-4734-9725-2ff5c08040a5",
+  "meta": {
+    "instanceId": "18511118834fffbeb08f43e08e89324870cf50b905bf56e860283eadefd05424"
+  },
+  "id": "9fMOWoBZdY8DanxC",
+  "tags": []
+}
