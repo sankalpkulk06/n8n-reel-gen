@@ -46,6 +46,10 @@ piper/out/*.wav
 piper/piper_stdout.txt
 piper/piper_stderr.txt
 
+# Large Model Files (download separately)
+piper/models/*.onnx
+piper/models/*.onnx.json
+
 # Local Configuration and Testing
 cmd.txt
 .env

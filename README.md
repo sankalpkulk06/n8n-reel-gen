@@ -82,11 +82,19 @@ This will install:
 - **ffmpeg-python** (0.2.0) - FFmpeg Python bindings
 - All supporting dependencies
 
-### 4. Install FFmpeg
+### 4. Download Piper Voice Models
+
+The Piper TTS voice models are not included in the repository due to their large size (60+ MB). Download them separately:
+
+1. Download the `en_US-lessac-medium` model from [Piper Voices](https://github.com/rhasspy/piper/releases)
+2. Place the `.onnx` and `.onnx.json` files in the `piper/models/` directory
+3. Or use any other Piper voice model and update the workflow configuration
+
+### 5. Install FFmpeg
 
 Download and install FFmpeg from [ffmpeg.org](https://ffmpeg.org/download.html) and add it to your system PATH, or update the workflow with the full FFmpeg path.
 
-### 5. Import n8n Workflow
+### 6. Import n8n Workflow
 
 1. Open your n8n instance (default: `http://localhost:5678`)
 2. Create a new workflow
